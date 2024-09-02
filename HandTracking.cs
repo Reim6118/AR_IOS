@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 using Unity.Collections;
+using Newtonsoft.Json;
 
 public class HandTracking : MonoBehaviour
 {
@@ -19,6 +20,8 @@ public class HandTracking : MonoBehaviour
     public float CaptureInterval = 0.1f;
     public string WebSocketUrl = "ws://192.168.0.15:8803";
 
+    [SerializeField] private HandVisualizer handVisualizer;
+
     private async void Start()
     {
         arCameraManager = FindObjectOfType<ARCameraManager>();
@@ -26,6 +29,8 @@ public class HandTracking : MonoBehaviour
         {
             Debug.LogError("ARCameraManager not found!");
             return;
+
+            
         }
 
         cts = new CancellationTokenSource();
@@ -61,6 +66,7 @@ public class HandTracking : MonoBehaviour
         while (!cts.IsCancellationRequested)
         {
             CaptureAndSendImage();
+            Debug.LogError("Capture image .......................................................");
             yield return new WaitForSeconds(CaptureInterval);
         }
     }
@@ -113,32 +119,111 @@ public class HandTracking : MonoBehaviour
         }
     }
 
+[Serializable]
+public class HandTrackingData
+{
+    public List<List<Vector3Data>> landmarks;
+}
+
+[Serializable]
+public class Vector3Data
+{
+    public float x;
+    public float y;
+    public float z;
+}
+
+
+
     private async Task ReceiveHandTrackingData()
+{
+    Debug.LogError("Inside Receive Hand Tracking Data");
+    var buffer = new byte[1024 * 4]; // Increased buffer size
+    while (webSocket.State == WebSocketState.Open && !cts.IsCancellationRequested)
     {
-        var buffer = new byte[8192]; // Increased buffer size
-        while (webSocket.State == WebSocketState.Open && !cts.IsCancellationRequested)
+        Debug.LogError("In while");
+        try
         {
-            try
+            var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
+            Debug.LogError("In try, result:" + result.Count + "buffer=" + buffer);
+            if (result.MessageType == WebSocketMessageType.Text)
             {
-                var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
-                if (result.MessageType == WebSocketMessageType.Text)
+                Debug.LogError("In if");
+                string jsonString = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                Debug.LogError("JsonString:" + jsonString);
+                if (jsonString != null)
                 {
-                    string jsonString = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    var handLandmarks = JsonUtility.FromJson<List<List<Vector3>>>(jsonString);
-                    UpdateHandModel(handLandmarks);
+                    string handString = jsonString.Trim('[', ']');
+                    string[] innerLists = handString.Split(new string[] { "], [" }, StringSplitOptions.RemoveEmptyEntries);
+                    List<Vector3>  handVectors = new List<Vector3>();
+                    foreach (string innerList in innerLists)
+                    {
+                        Debug.LogError("handstring split1 = " + innerList);
+                        string cleanedVectorString = innerList.Trim('[', ']');
+                        string[] components = cleanedVectorString.Split(',');
+                        float y = float.Parse(components[0].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                        float x = float.Parse(components[1].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                        // float z = float.Parse(components[2].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                        float z = 6f;
+                        handVectors.Add(new Vector3(x,y,z));
+                    }
+                    int count = 1;
+                    foreach (var vector in handVectors)
+                    {
+                        
+                        Debug.LogError("Vector quantity" + count);
+                        Debug.LogError("vector="+vector);
+                        count+=1;
+                    }
+                    handVisualizer.UpdateHandVisualization(handVectors);
+
+
                 }
-            }
-            catch (WebSocketException e)
-            {
-                Debug.LogError($"WebSocket receive error: {e.Message}");
-                break;
-            }
-            catch (OperationCanceledException)
-            {
-                break;
+                
+
+
+
+                // try
+                // {
+                //     // Deserialize JSON into a list of lists of Vector3Data
+                //     var handTrackingData = JsonConvert.DeserializeObject<HandTrackingData>(jsonString);
+
+                //     // Convert Vector3Data to Vector3
+                //     List<List<Vector3>> handLandmarks = new List<List<Vector3>>();
+                //     foreach (var sublist in handTrackingData.landmarks)
+                //     {
+                //         List<Vector3> vector3List = new List<Vector3>();
+                //         foreach (var data in sublist)
+                //         {
+                //             vector3List.Add(new Vector3(data.x, data.y, data.z));
+                //         }
+                //         handLandmarks.Add(vector3List);
+                //     }
+
+                //     Debug.LogError("Successfully deserialized JSON into hand landmarks.");
+                //     UpdateHandModel(handLandmarks);
+                // }
+                // catch (JsonException ex)
+                // {
+                //     Debug.LogError($"JSON Deserialization Error: {ex.Message}");
+                // }
             }
         }
+        catch (WebSocketException e)
+        {
+            Debug.LogError($"WebSocket receive error: {e.Message}");
+            break;
+        }
+        catch (OperationCanceledException)
+        {
+            break;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Unexpected error in ReceiveHandTrackingData: {ex.Message}");
+        }
     }
+}
 
     private async Task SendImageToServer(byte[] imageBytes)
     {
@@ -161,17 +246,23 @@ public class HandTracking : MonoBehaviour
 
     private void UpdateHandModel(List<List<Vector3>> handLandmarks)
     {
-        if (handLandmarks == null || handLandmarks.Count == 0)
-            return;
-
-        foreach (var hand in handLandmarks)
+        Debug.LogError("In updatehandmodel");
+        if (handLandmarks == null || handLandmarks.Count == 0){
+            Debug.LogError("No handlandmarks...");
+            return;}
+        
+        List<Vector3> landmarks = handLandmarks[0];
+        Debug.LogError("after list");
+        // Convert the landmarks to Unity's coordinate system
+        for (int i = 0; i < landmarks.Count; i++)
         {
-            for (int i = 0; i < hand.Count; i++)
-            {
-                Vector3 position = hand[i];
-                // TODO: Update your hand model here
-            }
+            Debug.LogError("Inside landmarks for");
+            landmarks[i] = new Vector3(landmarks[i].x, -landmarks[i].y, landmarks[i].z);
         }
+
+        // Update the hand visualizer
+        Debug.LogError("Landmarks:"+landmarks);
+        handVisualizer.UpdateHandVisualization(landmarks);
     }
 
     private async void OnDisable()
