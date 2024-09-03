@@ -18,10 +18,21 @@ public class HandTracking : MonoBehaviour
     private CancellationTokenSource cts;
     private Coroutine captureCoroutine;
     public float CaptureInterval = 0.1f;
-    public string WebSocketUrl = "ws://192.168.0.15:8803";
+    private string WebSocketUrl = "ws://192.168.0.15:8803";
+    // private string WebSocketUrl ="wss://f4ba-182-233-135-13.ngrok-free.app";
+    private Queue<System.Action> mainThreadActions = new Queue<System.Action>();
 
     [SerializeField] private HandVisualizer handVisualizer;
+    [SerializeField] private ARCreateObject aRCreateObject;
 
+    private void Update()
+    {
+        // Execute queued actions on the main thread
+        while (mainThreadActions.Count > 0)
+        {
+            mainThreadActions.Dequeue()?.Invoke();
+        }
+    }
     private async void Start()
     {
         arCameraManager = FindObjectOfType<ARCameraManager>();
@@ -44,7 +55,13 @@ public class HandTracking : MonoBehaviour
             Debug.LogError($"Failed to initialize: {e.Message}");
         }
     }
-
+    private void EnqueueMainThreadAction(System.Action action)
+    {
+        lock (mainThreadActions)
+        {
+            mainThreadActions.Enqueue(action);
+        }
+    }
     private async Task InitializeWebSocket()
     {
         try
@@ -164,7 +181,14 @@ public class Vector3Data
                         float y = float.Parse(components[0].Trim(), System.Globalization.CultureInfo.InvariantCulture);
                         float x = float.Parse(components[1].Trim(), System.Globalization.CultureInfo.InvariantCulture);
                         // float z = float.Parse(components[2].Trim(), System.Globalization.CultureInfo.InvariantCulture);
-                        float z = 6f;
+                        float z = 0.3f;
+                        EnqueueMainThreadAction(() =>
+                        {
+                            if(aRCreateObject.PlacementIndicator.activeSelf != false){
+                                z = aRCreateObject.PlacementIndicator.transform.position.z;
+                            }
+                        });
+                        
                         handVectors.Add(new Vector3(x,y,z));
                     }
                     int count = 1;

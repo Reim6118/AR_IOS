@@ -7,6 +7,9 @@ public class HandVisualizer : MonoBehaviour
     [SerializeField] private LineRenderer skeletonLinePrefab;
     [SerializeField] private LineRenderer contourLinePrefab;
     [SerializeField] private Camera mainCamera;
+    [SerializeField] private ARCreateObject aRCreateObject;
+    protected bool isPinched = false;
+    public bool IsPinched => isPinched;
     private List<GameObject> joints = new List<GameObject>();
     private List<LineRenderer> skeletonLines = new List<LineRenderer>();
     private LineRenderer contourLine;
@@ -45,6 +48,8 @@ public class HandVisualizer : MonoBehaviour
         contourLine.positionCount = fingerTips.Length + 1; // +1 for closing the loop
     }
 
+    
+
     public void UpdateHandVisualization(List<Vector3> landmarks)
     {
         if (landmarks.Count != 21) return;
@@ -60,24 +65,58 @@ public class HandVisualizer : MonoBehaviour
 
         }
 
-        // Update skeleton lines
-        for (int i = 0; i < connections.Length; i++)
+        if (DetectPinchingGesture(landmarks))
         {
-            Vector3[] positions = new Vector3[connections[i].Length];
-            for (int j = 0; j < connections[i].Length; j++)
+            // If a pinching gesture is detected and it's the first detection
+            if (!isPinched)
             {
-                positions[j] = landmarks[connections[i][j]];
+                Debug.Log("Pinching gesture detected!");
+                aRCreateObject.GetPinched();
+                isPinched = true;  // Set the local isPinched state to true
             }
-            skeletonLines[i].SetPositions(positions);
+        }
+        else
+        {
+            // If no pinching gesture is detected and it was previously pinched
+            if (isPinched)
+            {
+                Debug.Log("Pinching gesture released!");
+                aRCreateObject.ReleasePinch();
+                isPinched = false;  // Reset the local isPinched state
+            }
         }
 
-        // Update contour line
-        Vector3[] contourPositions = new Vector3[fingerTips.Length + 1];
-        for (int i = 0; i < fingerTips.Length; i++)
-        {
-            contourPositions[i] = landmarks[fingerTips[i]];
-        }
-        contourPositions[fingerTips.Length] = landmarks[fingerTips[0]]; // Close the loop
-        contourLine.SetPositions(contourPositions);
+        // // Update skeleton lines
+        // for (int i = 0; i < connections.Length; i++)
+        // {
+        //     Vector3[] positions = new Vector3[connections[i].Length];
+        //     for (int j = 0; j < connections[i].Length; j++)
+        //     {
+        //         positions[j] = landmarks[connections[i][j]];
+        //     }
+        //     skeletonLines[i].SetPositions(positions);
+        // }
+
+        // // Update contour line
+        // Vector3[] contourPositions = new Vector3[fingerTips.Length + 1];
+        // for (int i = 0; i < fingerTips.Length; i++)
+        // {
+        //     contourPositions[i] = landmarks[fingerTips[i]];
+        // }
+        // contourPositions[fingerTips.Length] = landmarks[fingerTips[0]]; // Close the loop
+        // contourLine.SetPositions(contourPositions);
+    }
+
+        private bool DetectPinchingGesture(List<Vector3> landmarks)
+    {
+        // Access the hand landmarks and detect the pinching gesture
+        Vector3 thumbTip = landmarks[4];
+        Vector3 indexTip = landmarks[8];
+
+        // Calculate the distance between the thumb and index finger tips
+        float distance = Vector3.Distance(thumbTip, indexTip);
+
+        // Detect the pinching gesture based on the distance
+        return distance < 0.05f;
     }
 }
