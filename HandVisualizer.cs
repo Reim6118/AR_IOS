@@ -3,18 +3,22 @@ using System.Collections.Generic;
 
 public class HandVisualizer : MonoBehaviour
 {
-    [SerializeField] private GameObject jointPrefab;
-    [SerializeField] private LineRenderer skeletonLinePrefab;
-    [SerializeField] private LineRenderer contourLinePrefab;
-    [SerializeField] private Camera mainCamera;
-    [SerializeField] private ARCreateObject aRCreateObject;
-    protected bool isPinched = false;
-    public bool IsPinched => isPinched;
-    private List<GameObject> joints = new List<GameObject>();
-    private List<LineRenderer> skeletonLines = new List<LineRenderer>();
-    private LineRenderer contourLine;
+    // Prefabs for visualizing the hand joints and lines
+    [SerializeField] private GameObject jointPrefab; // Prefab for visualizing each joint
+    [SerializeField] private LineRenderer skeletonLinePrefab; // Prefab for visualizing the skeleton lines between joints
+    [SerializeField] private LineRenderer contourLinePrefab; // Prefab for visualizing the contour line around the hand
+    [SerializeField] private Camera mainCamera; // Reference to the main camera for coordinate conversion
+    [SerializeField] private ARCreateObject aRCreateObject; // Reference to ARCreateObject script for handling AR object creation
+    protected bool isPinched = false; // State to check if a pinching gesture is detected
+    public bool IsPinched => isPinched; // Public property to access the pinching state
+    private List<GameObject> joints = new List<GameObject>(); // List to store all the instantiated joint GameObjects
+    private List<LineRenderer> skeletonLines = new List<LineRenderer>(); // List to store all the instantiated skeleton lines
+    private LineRenderer contourLine; // LineRenderer to draw the contour line around the hand
 
+    // Indices of the finger tips in the landmarks list
     private readonly int[] fingerTips = { 4, 8, 12, 16, 20 };
+
+    // Connections defining which joints are connected to form the hand skeleton
     private readonly int[][] connections = new int[][]
     {
         new int[] { 0, 1, 2, 3, 4 },     // Thumb
@@ -23,7 +27,6 @@ public class HandVisualizer : MonoBehaviour
         new int[] { 13, 14, 15, 16 },    // Ring finger
         new int[] { 17, 18, 19, 20 },    // Pinky
         new int[] { 0, 5, 9, 13, 17 }    // Palm
-        
     };
 
     private void Start()
@@ -31,47 +34,47 @@ public class HandVisualizer : MonoBehaviour
         // Initialize joints
         for (int i = 0; i < 21; i++)
         {
-            GameObject joint = Instantiate(jointPrefab, transform);
-            joints.Add(joint);
+            GameObject joint = Instantiate(jointPrefab, transform); // Instantiate each joint prefab
+            joints.Add(joint); // Add the instantiated joint to the list
         }
 
         // Initialize skeleton lines
         foreach (var connection in connections)
         {
-            LineRenderer line = Instantiate(skeletonLinePrefab, transform);
-            line.positionCount = connection.Length;
-            skeletonLines.Add(line);
+            LineRenderer line = Instantiate(skeletonLinePrefab, transform); // Instantiate a line renderer for each connection
+            line.positionCount = connection.Length; // Set the number of positions based on the number of joints in the connection
+            skeletonLines.Add(line); // Add the instantiated line to the list
         }
 
         // Initialize contour line
-        contourLine = Instantiate(contourLinePrefab, transform);
-        contourLine.positionCount = fingerTips.Length + 1; // +1 for closing the loop
+        contourLine = Instantiate(contourLinePrefab, transform); // Instantiate the contour line renderer
+        contourLine.positionCount = fingerTips.Length + 1; // Set position count to include all finger tips plus one for closing the loop
     }
 
-    
-
+    // Updates the visualization of the hand based on detected landmarks
     public void UpdateHandVisualization(List<Vector3> landmarks)
     {
-        if (landmarks.Count != 21) return;
+        if (landmarks.Count != 21) return; // Ensure the landmarks list has 21 positions
 
         // Update joint positions
         for (int i = 0; i < landmarks.Count; i++)
         {
             Debug.LogError("Visualize landmark=" + landmarks[i]);
-            // joints[i].transform.localPosition = landmarks[i];
+            
+            // Convert viewport coordinates to world coordinates for each landmark
             Vector3 worldPosition = mainCamera.ViewportToWorldPoint(landmarks[i]);
-            Debug.LogError("WorldPosition="+worldPosition);
-            joints[i].transform.localPosition = worldPosition;
-
+            Debug.LogError("WorldPosition=" + worldPosition);
+            joints[i].transform.localPosition = worldPosition; // Update joint position
         }
 
+        // Check for pinching gesture
         if (DetectPinchingGesture(landmarks))
         {
             // If a pinching gesture is detected and it's the first detection
             if (!isPinched)
             {
                 Debug.Log("Pinching gesture detected!");
-                aRCreateObject.GetPinched();
+                aRCreateObject.GetPinched(); // Notify AR object creation about the pinch
                 isPinched = true;  // Set the local isPinched state to true
             }
         }
@@ -81,10 +84,13 @@ public class HandVisualizer : MonoBehaviour
             if (isPinched)
             {
                 Debug.Log("Pinching gesture released!");
-                aRCreateObject.ReleasePinch();
+                aRCreateObject.ReleasePinch(); // Notify AR object creation about the release
                 isPinched = false;  // Reset the local isPinched state
             }
         }
+
+        // The code below to update skeleton lines and contour lines is currently commented out
+        // If you need to visualize these, uncomment the code below
 
         // // Update skeleton lines
         // for (int i = 0; i < connections.Length; i++)
@@ -107,16 +113,17 @@ public class HandVisualizer : MonoBehaviour
         // contourLine.SetPositions(contourPositions);
     }
 
-        private bool DetectPinchingGesture(List<Vector3> landmarks)
+    // Detects a pinching gesture based on hand landmarks
+    private bool DetectPinchingGesture(List<Vector3> landmarks)
     {
         // Access the hand landmarks and detect the pinching gesture
-        Vector3 thumbTip = landmarks[4];
-        Vector3 indexTip = landmarks[8];
+        Vector3 thumbTip = landmarks[4]; // Thumb tip position
+        Vector3 indexTip = landmarks[8]; // Index finger tip position
 
         // Calculate the distance between the thumb and index finger tips
         float distance = Vector3.Distance(thumbTip, indexTip);
 
         // Detect the pinching gesture based on the distance
-        return distance < 0.05f;
+        return distance < 0.05f; // Return true if the distance is less than the threshold
     }
 }
